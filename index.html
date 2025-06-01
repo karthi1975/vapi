@@ -1,0 +1,778 @@
+<!-- templates/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG PDF Document Assistant with Voice</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <style>
+        body {
+            padding-top: 2rem;
+            padding-bottom: 2rem;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        .spinner-border {
+            display: none;
+        }
+        .source-item {
+            border-left: 3px solid #6c757d;
+            padding-left: 10px;
+            margin-bottom: 10px;
+        }
+        #sources-container {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        .score-badge {
+            float: right;
+        }
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+        }
+        .voice-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        #record-button, #stop-button {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #record-button {
+            background-color: #dc3545;
+            color: white;
+        }
+        #stop-button {
+            background-color: #6c757d;
+            color: white;
+            display: none;
+        }
+        #recording-status {
+            color: #dc3545;
+            font-weight: bold;
+            display: none;
+        }
+        .tab-content {
+            padding: 20px;
+            border: 1px solid #dee2e6;
+            border-top: 0;
+            border-radius: 0 0 5px 5px;
+        }
+        .audio-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        #play-response, #pause-response {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        #pause-response {
+            display: none;
+        }
+        .image-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        .image-container img {
+            max-height: 180px;
+            border-radius: 5px;
+            border: 1px solid #dee2e6;
+        }
+        .app-header {
+            background-color: #f8f9fa;
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+        }
+        .app-logo {
+            height: 100px;
+            width:100px;
+            margin-right: 15px;
+        }
+        .app-title {
+            margin: 0;
+            color: #343a40;
+        }
+        .topic-pill {
+            background-color: #e9ecef;
+            color: #495057;
+            padding: 3px 10px;
+            border-radius: 16px;
+            font-size: 0.9em;
+            margin-right: 5px;
+            margin-bottom: 5px;
+            display: inline-block;
+            cursor: pointer;
+        }
+        .topic-pill.selected {
+            background-color: #0d6efd;
+            color: white;
+        }
+        /* Direct navigation styles */
+        .custom-nav-tabs {
+            display: flex;
+            list-style: none;
+            padding-left: 0;
+            margin-bottom: 0;
+            border-bottom: 1px solid #dee2e6;
+        }
+        .custom-nav-item {
+            margin-bottom: -1px;
+        }
+        .custom-nav-link {
+            display: block;
+            padding: 0.5rem 1rem;
+            border: 1px solid transparent;
+            border-top-left-radius: 0.25rem;
+            border-top-right-radius: 0.25rem;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        .custom-nav-link.active {
+            color: #495057;
+            background-color: #fff;
+            border-color: #dee2e6 #dee2e6 #fff;
+        }
+        .custom-nav-link:not(.active) {
+            color: #007bff;
+        }
+        .custom-nav-link:hover:not(.active) {
+            color: #0056b3;
+            border-color: #e9ecef #e9ecef #dee2e6;
+        }
+        .custom-tab-content {
+            padding: 1rem;
+            border: 1px solid #dee2e6;
+            border-top: 0;
+            border-radius: 0 0 0.25rem 0.25rem;
+        }
+        .custom-tab-pane {
+            display: none;
+        }
+        .custom-tab-pane.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="app-header">
+            <img src="/static/logo-neilsen.svg" alt="Vapi" class="app-logo">
+            <h1 class="app-title">Voice Educator</h1>
+        </div>
+        
+        <!-- Simple custom navigation -->
+        <ul class="custom-nav-tabs mb-3" id="customNavTabs">
+            <li class="custom-nav-item">
+                <a class="custom-nav-link active" id="upload-tab" onclick="showTab('upload')">Upload Documents</a>
+            </li>
+            <li class="custom-nav-item">
+                <a class="custom-nav-link" id="questions-tab" onclick="showTab('questions')">Ask Questions</a>
+            </li>
+        </ul>
+        
+        <div class="custom-tab-content">
+            <!-- Upload Documents Tab -->
+            <div class="custom-tab-pane active" id="upload-tab-content">
+                <div class="card border-0">
+                    <div class="card-body">
+                        <h4 class="mb-3">Upload PDF Documents</h4>
+                        <form id="upload-form" enctype="multipart/form-data">
+                            <div class="mb-3">
+                                <label for="files" class="form-label">Select PDF Documents</label>
+                                <input class="form-control" type="file" id="files" name="files" multiple accept=".pdf">
+                                <div class="form-text">Upload one or more PDF files to add to the knowledge base.</div>
+                            </div>
+                            
+                            <div class="mb-3">
+                                <label for="topic" class="form-label">Document Topic</label>
+                                <input type="text" class="form-control" id="topic" name="topic" required placeholder="Enter a topic for these documents">
+                                <div class="form-text">Assign a topic to organize your documents (e.g., "Medical", "Finance", "Insurance").</div>
+                            </div>
+                            
+                            <button type="submit" class="btn btn-primary">
+                                <span id="upload-spinner" class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                                Upload and Process Documents
+                            </button>
+                        </form>
+                        <div id="upload-status" class="mt-3"></div>
+                        
+                        <div class="mt-4">
+                            <h5>Uploaded Documents</h5>
+                            <div id="document-list" class="list-group">
+                                <div class="list-group-item d-flex justify-content-between align-items-center">
+                                    <div>No documents uploaded yet</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Ask Questions Tab -->
+            <div class="custom-tab-pane" id="questions-tab-content">
+                <div class="row">
+                    <div class="col-lg-12 mb-3">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0">Ask About Your Documents</h5>
+                            </div>
+                            <div class="card-body">
+                                <div id="topics-container" class="mb-3">
+                                    <label class="form-label">Filter by Topic (Optional)</label>
+                                    <div id="topic-pills" class="mt-1">
+                                        <div class="topic-pill selected" data-topic="">All Topics</div>
+                                        <!-- Other topic pills will be added dynamically -->
+                                    </div>
+                                </div>
+                                
+                                <form id="query-form">
+                                    <div class="input-group mb-3">
+                                        <input type="text" class="form-control" id="question" name="question" placeholder="Type your question here..." required>
+                                        <button type="button" id="record-button" class="btn btn-outline-danger">
+                                            <i class="bi bi-mic-fill"></i>
+                                        </button>
+                                        <button type="button" id="stop-button" class="btn btn-outline-secondary">
+                                            <i class="bi bi-stop-fill"></i>
+                                        </button>
+                                        <button type="submit" class="btn btn-primary">
+                                            <i class="bi bi-search"></i> Ask
+                                        </button>
+                                    </div>
+                                    <div id="recording-status" class="mb-2">Recording...</div>
+                                    
+                                    <div class="row">
+                                        <div class="col-md-6 mb-3">
+                                            <label for="top_k" class="form-label">Number of documents to search</label>
+                                            <input type="range" class="form-range" id="top_k" name="top_k" min="1" max="15" value="5">
+                                            <div class="d-flex justify-content-between">
+                                                <span class="form-text">1</span>
+                                                <span id="top_k_value" class="form-text">5</span>
+                                                <span class="form-text">15</span>
+                                            </div>
+                                        </div>
+                                        
+                                        <div class="col-md-6 mb-3">
+                                            <label for="voice-select" class="form-label">Voice Response</label>
+                                            <select id="voice-select" class="form-select">
+                                                <option value="">No voice</option>
+                                                <option value="echo" selected>Echo (Default)</option>
+                                                <!-- Additional voices will be populated from API -->
+                                            </select>
+                                        </div>
+                                    </div>
+                                </form>
+                                
+                                <div id="answer-container" style="display: none;">
+                                    <h5>Answer:</h5>
+                                    <div id="answer" class="p-3 bg-light rounded"></div>
+                                    
+                                    <div class="audio-controls mt-2">
+                                        <button type="button" id="play-response" class="btn btn-outline-primary">
+                                            <i class="bi bi-play-fill"></i>
+                                        </button>
+                                        <button type="button" id="pause-response" class="btn btn-outline-secondary">
+                                            <i class="bi bi-pause-fill"></i>
+                                        </button>
+                                    </div>
+                                    
+                                    <div class="mt-3">
+                                        <h5>Relevant Sources:</h5>
+                                        <div id="sources-container" class="p-2 bg-light rounded">
+                                            <p>Ask a question to see relevant sources.</p>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="mt-3">
+                                        <h5>Images:</h5>
+                                        <div id="images-container" class="p-2 bg-light rounded">
+                                            <p>No images available for this query.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Audio elements for playback and announcements (hidden) -->
+    <audio id="audio-player" style="display: none;"></audio>
+    <audio id="announcement-player" style="display: none;"></audio>
+    
+    <script>
+        // Global variables
+        let voiceUsedForQuery = false;
+        let speechSynthesis = window.speechSynthesis;
+        
+        // Simple tab navigation function
+        function showTab(tabName) {
+            // Hide all tab panes
+            const tabPanes = document.querySelectorAll('.custom-tab-pane');
+            tabPanes.forEach(pane => {
+                pane.classList.remove('active');
+            });
+            
+            // Show the selected tab pane
+            if (tabName === 'upload') {
+                document.getElementById('upload-tab-content').classList.add('active');
+                document.getElementById('upload-tab').classList.add('active');
+                document.getElementById('questions-tab').classList.remove('active');
+            } else if (tabName === 'questions') {
+                document.getElementById('questions-tab-content').classList.add('active');
+                document.getElementById('questions-tab').classList.add('active');
+                document.getElementById('upload-tab').classList.remove('active');
+                // Load topics when switching to questions tab
+                loadTopics();
+            }
+        }
+        
+        // Function to speak text using the browser's speech synthesis
+        function speakText(text) {
+            // Cancel any ongoing speech
+            speechSynthesis.cancel();
+            
+            // Create a new utterance
+            const utterance = new SpeechSynthesisUtterance(text);
+            
+            // Get available voices
+            let voices = speechSynthesis.getVoices();
+            if (voices.length === 0) {
+                // If voices are not available yet, wait a bit and try again
+                setTimeout(() => {
+                    voices = speechSynthesis.getVoices();
+                    // Try to find a good voice
+                    const preferredVoice = voices.find(voice => 
+                        voice.name.includes('Female') || 
+                        voice.name.includes('Samantha') ||
+                        voice.name.includes('Karen')
+                    ) || voices[0];
+                    
+                    if (preferredVoice) {
+                        utterance.voice = preferredVoice;
+                    }
+                    
+                    // Speak
+                    speechSynthesis.speak(utterance);
+                }, 100);
+            } else {
+                // Try to find a good voice
+                const preferredVoice = voices.find(voice => 
+                    voice.name.includes('Female') || 
+                    voice.name.includes('Samantha') ||
+                    voice.name.includes('Karen')
+                ) || voices[0];
+                
+                if (preferredVoice) {
+                    utterance.voice = preferredVoice;
+                }
+                
+                // Speak
+                speechSynthesis.speak(utterance);
+            }
+        }
+        
+        // Improved Speech Recognition with Voice Feedback
+        let recognition;
+        let isRecording = false;
+        
+        // Initialize speech recognition
+        function initSpeechRecognition() {
+            if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+                recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+                recognition.continuous = true;
+                recognition.interimResults = true;
+                
+                recognition.onstart = function() {
+                    // Announce recording started
+                    speakText("I'm listening. What would you like to know about your documents?");
+                    document.getElementById('recording-status').style.display = 'block';
+                };
+                
+                recognition.onresult = function(event) {
+                    const transcript = Array.from(event.results)
+                        .map(result => result[0])
+                        .map(result => result.transcript)
+                        .join('');
+                    
+                    document.getElementById('question').value = transcript;
+                    
+                    // If the user has stopped speaking, automatically stop recording
+                    if (event.results[0].isFinal) {
+                        setTimeout(function() {
+                            stopRecording();
+                            // Auto-submit if the query is sufficiently long
+                            if (transcript.length > 5) {
+                                voiceUsedForQuery = true;
+                                document.getElementById('query-form').dispatchEvent(new Event('submit'));
+                            }
+                        }, 1500);
+                    }
+                };
+                
+                recognition.onend = function() {
+                    if (isRecording) {
+                        recognition.start();
+                    } else {
+                        document.getElementById('recording-status').style.display = 'none';
+                    }
+                };
+                
+                recognition.onerror = function(event) {
+                    console.error('Speech recognition error:', event.error);
+                    stopRecording();
+                    speakText("Sorry, I couldn't hear you. Please try again.");
+                };
+            } else {
+                document.getElementById('record-button').disabled = true;
+                document.getElementById('record-button').title = "Speech recognition not supported in this browser";
+                alert("Speech recognition is not supported in this browser. Please try Chrome or Edge.");
+            }
+        }
+        
+        // Start recording function
+        function startRecording() {
+            if (recognition) {
+                isRecording = true;
+                voiceUsedForQuery = true;
+                try {
+                    recognition.start();
+                    document.getElementById('record-button').style.display = 'none';
+                    document.getElementById('stop-button').style.display = 'inline-block';
+                } catch (e) {
+                    console.error("Recognition error:", e);
+                    alert("Error starting speech recognition. Please try again.");
+                }
+            }
+        }
+        
+        // Stop recording function
+        function stopRecording() {
+            if (recognition) {
+                isRecording = false;
+                recognition.stop();
+                document.getElementById('stop-button').style.display = 'none';
+                document.getElementById('record-button').style.display = 'inline-block';
+                document.getElementById('recording-status').style.display = 'none';
+            }
+        }
+        
+        // Load topics from API
+        async function loadTopics() {
+            try {
+                const response = await fetch('/api/topics');
+                const result = await response.json();
+                
+                if (response.ok && result.topics && result.topics.length > 0) {
+                    const topicPills = document.getElementById('topic-pills');
+                    
+                    // Clear existing pills except "All Topics"
+                    topicPills.innerHTML = '<div class="topic-pill selected" data-topic="">All Topics</div>';
+                    
+                    // Add topic pills
+                    result.topics.forEach(topic => {
+                        const pill = document.createElement('div');
+                        pill.className = 'topic-pill';
+                        pill.setAttribute('data-topic', topic);
+                        pill.textContent = topic;
+                        topicPills.appendChild(pill);
+                        
+                        // Add click event
+                        pill.addEventListener('click', function() {
+                            document.querySelectorAll('.topic-pill').forEach(p => {
+                                p.classList.remove('selected');
+                            });
+                            this.classList.add('selected');
+                        });
+                    });
+                }
+            } catch (error) {
+                console.error("Error loading topics:", error);
+            }
+        }
+        
+        // Document Upload Form
+        document.getElementById('upload-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const uploadSpinner = document.getElementById('upload-spinner');
+            const uploadStatus = document.getElementById('upload-status');
+            
+            uploadSpinner.style.display = 'inline-block';
+            uploadStatus.innerHTML = '<div class="alert alert-info">Uploading and indexing documents...</div>';
+            
+            const formData = new FormData();
+            const files = document.getElementById('files').files;
+            const topic = document.getElementById('topic').value;
+            
+            if (files.length === 0) {
+                uploadStatus.innerHTML = '<div class="alert alert-danger">Please select at least one PDF file.</div>';
+                uploadSpinner.style.display = 'none';
+                return;
+            }
+            
+            for (let i = 0; i < files.length; i++) {
+                formData.append('files', files[i]);
+            }
+            formData.append('topic', topic);
+            
+            try {
+                const response = await fetch('/api/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    uploadStatus.innerHTML = `<div class="alert alert-success">Successfully processed ${files.length} document(s).</div>`;
+                    // Speak upload success message
+                    speakText(`Successfully processed ${files.length} documents about ${topic}.`);
+                    // Reset form
+                    document.getElementById('files').value = '';
+                    document.getElementById('topic').value = '';
+                    // Refresh topics
+                    loadTopics();
+                } else {
+                    uploadStatus.innerHTML = `<div class="alert alert-danger">Error: ${result.detail || 'Failed to process documents'}</div>`;
+                    speakText("There was a problem processing your documents. Please try again.");
+                }
+            } catch (error) {
+                uploadStatus.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
+                speakText("There was a problem with the server. Please try again later.");
+            } finally {
+                uploadSpinner.style.display = 'none';
+            }
+        });
+        
+        // Query Submission
+        document.getElementById('query-form').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const question = document.getElementById('question').value;
+            const topK = document.getElementById('top_k').value;
+            const voiceId = document.getElementById('voice-select').value;
+            
+            // Get selected topic
+            const activeTopic = document.querySelector('.topic-pill.selected');
+            const topic = activeTopic ? activeTopic.getAttribute('data-topic') : '';
+            
+            const answerContainer = document.getElementById('answer-container');
+            const answer = document.getElementById('answer');
+            const sourcesContainer = document.getElementById('sources-container');
+            const imagesContainer = document.getElementById('images-container');
+            
+            // Show loading
+            answer.innerHTML = '<div class="spinner-border" role="status" style="display:inline-block"><span class="visually-hidden">Loading...</span></div>';
+            answerContainer.style.display = 'block';
+            sourcesContainer.innerHTML = '<div class="spinner-border" role="status" style="display:inline-block"><span class="visually-hidden">Loading...</span></div>';
+            
+            // Announce searching if voice was used
+            if (voiceUsedForQuery) {
+                speakText("Searching your documents for an answer...");
+            }
+            
+            try {
+                const response = await fetch('/api/query', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        question: question,
+                        top_k: parseInt(topK),
+                        voice_id: voiceId || null,
+                        topic: topic
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    // Display answer
+                    answer.innerHTML = result.answer.replace(/\n/g, '<br>');
+                    
+                    // Read answer aloud if voice was used for the query
+                    if (voiceUsedForQuery && !voiceId) {
+                        // Only use browser TTS if Vapi TTS wasn't selected
+                        speakText("Here's what I found: " + result.answer);
+                    }
+                    
+                    // Display sources
+                    if (result.sources && result.sources.length > 0) {
+                        let sourcesHtml = '<ul class="list-group">';
+                        result.sources.forEach(source => {
+                            sourcesHtml += `
+                                <li class="list-group-item">
+                                    <strong>${source.title || 'Unknown'}</strong>
+                                    ${source.topic ? `<span class="badge bg-secondary float-end">${source.topic}</span>` : ''}
+                                </li>
+                            `;
+                        });
+                        sourcesHtml += '</ul>';
+                        sourcesContainer.innerHTML = sourcesHtml;
+                    } else {
+                        sourcesContainer.innerHTML = '<p>No relevant sources found.</p>';
+                    }
+                    
+                    // Display images
+                    if (result.images && result.images.length > 0) {
+                        let imagesHtml = '<div class="row">';
+                        result.images.forEach(image => {
+                            imagesHtml += `
+                                <div class="col-md-4 mb-2">
+                                    <img src="${image}" class="img-fluid img-thumbnail" alt="Document image">
+                                </div>
+                            `;
+                        });
+                        imagesHtml += '</div>';
+                        imagesContainer.innerHTML = imagesHtml;
+                    } else {
+                        imagesContainer.innerHTML = '<p>No images available for this query.</p>';
+                    }
+                    
+                    // Setup voice playback for Vapi TTS
+                    const audioPlayer = document.getElementById('audio-player');
+                    const playButton = document.getElementById('play-response');
+                    const pauseButton = document.getElementById('pause-response');
+                    
+                    if (result.speech && (result.speech.audio_url || result.speech.audio_data)) {
+                        playButton.style.display = 'inline-block';
+                        
+                        // Set up audio source
+                        if (result.speech.audio_url) {
+                            audioPlayer.src = result.speech.audio_url;
+                        } else if (result.speech.audio_data) {
+                            audioPlayer.src = `data:audio/mp3;base64,${result.speech.audio_data}`;
+                        }
+                        
+                        // Auto-play if voice was used for the query
+                        if (voiceUsedForQuery) {
+                            audioPlayer.play();
+                            playButton.style.display = 'none';
+                            pauseButton.style.display = 'inline-block';
+                        }
+                        
+                        // Setup play button
+                        playButton.onclick = function() {
+                            audioPlayer.play();
+                            playButton.style.display = 'none';
+                            pauseButton.style.display = 'inline-block';
+                        };
+                        
+                        // Setup pause button
+                        pauseButton.onclick = function() {
+                            audioPlayer.pause();
+                            pauseButton.style.display = 'none';
+                            playButton.style.display = 'inline-block';
+                        };
+                        
+                        // When audio ends
+                        audioPlayer.onended = function() {
+                            pauseButton.style.display = 'none';
+                            playButton.style.display = 'inline-block';
+                        };
+                    } else {
+                        playButton.style.display = 'none';
+                    }
+                    
+                    // Reset voice flag after handling
+                    voiceUsedForQuery = false;
+                    
+                } else {
+                    answer.innerHTML = `<div class="alert alert-danger">Error: ${result.detail || 'Failed to get answer'}</div>`;
+                    sourcesContainer.innerHTML = '<p>No sources available due to error.</p>';
+                    imagesContainer.innerHTML = '<p>No images available.</p>';
+                    
+                    // Speak error message if voice was used
+                    if (voiceUsedForQuery) {
+                        speakText("I'm sorry, there was a problem getting your answer. Please try again.");
+                    }
+                }
+            } catch (error) {
+                answer.innerHTML = `<div class="alert alert-danger">Error: ${error.message}</div>`;
+                sourcesContainer.innerHTML = '<p>No sources available due to error.</p>';
+                imagesContainer.innerHTML = '<p>No images available.</p>';
+                
+                // Speak error message if voice was used
+                if (voiceUsedForQuery) {
+                    speakText("I'm sorry, there was a connection problem. Please check your internet and try again.");
+                }
+            }
+        });
+        
+        // Update top_k value display
+        document.getElementById('top_k').addEventListener('input', function() {
+            document.getElementById('top_k_value').textContent = this.value;
+        });
+        
+        // Set up record and stop button event listeners
+        document.getElementById('record-button').addEventListener('click', startRecording);
+        document.getElementById('stop-button').addEventListener('click', stopRecording);
+        
+        // Load voices on page load
+        document.addEventListener('DOMContentLoaded', async function() {
+            // Initialize speech recognition
+            initSpeechRecognition();
+            
+            // Force voice loading
+            speechSynthesis.getVoices();
+            
+            // Load Vapi voices
+            try {
+                const response = await fetch('/api/voices');
+                const result = await response.json();
+                
+                if (response.ok && result.voices && result.voices.length > 0) {
+                    const voiceSelect = document.getElementById('voice-select');
+                    
+                    // Keep existing options
+                    const currentOptions = voiceSelect.innerHTML;
+                    
+                    // Add voices
+                    result.voices.forEach(voice => {
+                        if (voice.id === "echo" || voice.voice_id === "echo") return; // Skip if already added
+                        
+                        const option = document.createElement('option');
+                        option.value = voice.id || voice.voice_id;
+                        option.textContent = voice.name || voice.voice_id;
+                        voiceSelect.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error("Failed to load voices:", error);
+            }
+        });
+        
+        // Force voices to load (needed for some browsers)
+        if (speechSynthesis.onvoiceschanged !== undefined) {
+            speechSynthesis.onvoiceschanged = function() {
+                // Voices are now loaded
+                console.log("Voices loaded:", speechSynthesis.getVoices().length);
+            };
+        }
+    </script>
+</body>
+</html>
